@@ -13,7 +13,6 @@
 
         <!--        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" type="text/css">
                 <link rel="stylesheet" href="https://pingendo.github.io/templates/blank/theme.css" type="text/css"> </head>-->
-
     <body>
         <div class="navbar navbar-default navbar-static-top no-print">
             <div class="container">
@@ -28,7 +27,10 @@
                 <div class="collapse navbar-collapse" id="navbar-ex-collapse">
                     <ul class="nav navbar-nav navbar-right">
                         <li class="nav-item active">
-                            <a class="nav-link" href="index.php">Home\</a>
+                            <a class="nav-link" href="index.php">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="analisa.php">Analisa</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="upload.php">Upload</a>
@@ -41,59 +43,91 @@
             <div class="container">
                 <div class="row">
                     <div class="col-md-12">
-                        <form method="POST" class="">
-                            <div class="form-group"> <label>Kalimat</label>
-                                <input value="<?= isset($_POST['kalimat']) ? $_POST['kalimat'] : '' ?>" name="kalimat" type="text" class="form-control" placeholder="Kalimat"> </div>
-                            <button type="submit" class="btn btn-primary">Analisa</button>
-                            <?php
-                            if (isset($_POST['kalimat'])) {
+                        <?php
 
-                                class SentimenDB extends SQLite3 {
+                        class SentimenDB extends SQLite3 {
 
-                                    function __construct() {
-                                        $this->open('sentimen.db');
-                                    }
+                            function __construct() {
+                                $this->open('sentimen.db');
+                            }
 
-                                }
+                        }
 
-                                $db = new SentimenDB();
-                                if ($db) {
-                                    $p = $n = $pt = $nt = 0.0;
-                                    $sql = "SELECT SUM(p) as pt,SUM(n) as nt FROM sentimen;";
-                                    $ret = $db->query($sql);
-                                    while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
-                                        $pt = $row['pt'];
-                                        $nt = $row['nt'];
-                                    }
-                                    $sql = "SELECT COUNT(s) AS s, SUM(p) AS p, SUM(n) AS n FROM (SELECT s, (SUM(p) > SUM(n)) AS p, (SUM(n) > SUM(p)) AS n FROM sentimen GROUP BY s) stm;";
-                                    $ret = $db->query($sql);
-                                    while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
-                                        $p = ($row['p'] + 1) / ($row['s'] + 1);
-                                        $n = ($row['n'] + 1) / ($row['s'] + 1);
-                                    }
+                        $db = new SentimenDB();
+                        if ($db) {
+                            $url = 'http://qa.forca.id:82/crm-ws/query';
+                            $data = array(
+                                'uuid' => '1bb65fb5-890f-4ad4-aea7-d47e75a1fd33',
+                                'query' => 'select adu."name", cmce.created, cmce.characterdata from cm_chatentry cmce left join ad_user adu on adu.ad_user_id = cmce.createdby'
+                            );
 
-                                    $kalimat = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', strtolower($_POST['kalimat'])));
-                                    foreach ($kalimat as $kata) {
-                                        $sql = "SELECT SUM(p) as p FROM sentimen where w like '$kata';";
+                            $options = array(
+                                'http' => array(
+                                    'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+                                    'method' => 'POST',
+                                    'content' => http_build_query($data)
+                                )
+                            );
+                            $context = stream_context_create($options);
+                            $result = file_get_contents($url, false, $context);
+
+                            $ar_results = json_decode(gzuncompress($result));
+                            ?>
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Nama</th>
+                                        <th>Tanggal</th>
+                                        <th>Komentar</th>
+                                        <th>Analisa</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    foreach ($ar_results as $ar_result) {
+                                        $p = $n = $pt = $nt = 0.0;
+                                        $sql = "SELECT SUM(p) as pt,SUM(n) as nt FROM sentimen;";
                                         $ret = $db->query($sql);
                                         while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
-                                            $p *= ($row['p'] + 1) / ($pt + 1);
+                                            $pt = $row['pt'];
+                                            $nt = $row['nt'];
                                         }
-                                        $sql = "SELECT SUM(n) as n FROM sentimen where w like '$kata';";
+                                        $sql = "SELECT COUNT(s) AS s, SUM(p) AS p, SUM(n) AS n FROM (SELECT s, (SUM(p) > SUM(n)) AS p, (SUM(n) > SUM(p)) AS n FROM sentimen GROUP BY s) stm;";
                                         $ret = $db->query($sql);
                                         while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
-                                            $n *= ($row['n'] + 1) / ($nt + 1);
+                                            $p = ($row['p']) / ($row['s']);
+                                            $n = ($row['n']) / ($row['s']);
                                         }
-                                    }
-                                    $db->close();
-                                    ?>
-                                    <div class="form-group"> <label>Sentimen</label>
-                                        <input value="<?= (($p == $n) ? "NETRAL" : (($p > $n) ? "POSITIF" : "NEGATIF")) . " ($p/$n)" ?> " name="sentimen" type="text" class="form-control" placeholder="Sentimen" readonly="readonly"> </div>
+
+                                        $kalimat = preg_split('/\s+/', preg_replace('/[^A-Za-z0-9\s]/', '', strtolower($ar_result->characterdata)));
+                                        foreach ($kalimat as $kata) {
+                                            $sql = "SELECT SUM(p) as p FROM sentimen where w like '$kata';";
+                                            $ret = $db->query($sql);
+                                            while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
+                                                $p *= ($row['p']) / ($pt);
+                                            }
+                                            $sql = "SELECT SUM(n) as n FROM sentimen where w like '$kata';";
+                                            $ret = $db->query($sql);
+                                            while ($row = $ret->fetchArray(SQLITE3_ASSOC)) {
+                                                $n *= ($row['n']) / ($nt);
+                                            }
+                                        }
+                                        ?>
+                                        <tr>
+                                            <td><?= $ar_result->name ?></td>
+                                            <td><?= $ar_result->created ?></td>
+                                            <td><?= $ar_result->characterdata ?></td>
+                                            <td><?= (($p == $n) ? "NETRAL" : (($p > $n) ? "POSITIF" : "NEGATIF")) . " ($p/$n)" ?></td>
+                                        </tr>
                                         <?php
                                     }
-                                }
-                                ?>
-                        </form>
+                                    ?>
+                                </tbody>
+                            </table>
+                            <?php
+                            $db->close();
+                        }
+                        ?>
                     </div>
                 </div>
             </div>

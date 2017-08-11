@@ -30,6 +30,9 @@
                         <li class="nav-item">
                             <a class="nav-link" href="index.php">Home</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="analisa.php">Analisa</a>
+                        </li>
                         <li class="nav-item active">
                             <a class="nav-link" href="upload.php">Upload</a>
                         </li>
